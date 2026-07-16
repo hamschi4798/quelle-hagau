@@ -271,6 +271,14 @@ const IconPrinter = p => /*#__PURE__*/React.createElement(Icon, p, /*#__PURE__*/
 }), /*#__PURE__*/React.createElement("path", {
   d: "M6 17v5h12v-5"
 }));
+const IconWrench = p => /*#__PURE__*/React.createElement(Icon, p, /*#__PURE__*/React.createElement("path", {
+  d: "M14.7 6.3a4 4 0 0 1-5.6 5.6L4 17l3 3 5.1-5.1a4 4 0 0 1 5.6-5.6l-3 3-3-3 3-3Z"
+}));
+const IconTrendDown = p => /*#__PURE__*/React.createElement(Icon, p, /*#__PURE__*/React.createElement("path", {
+  d: "M3 7l7 7 4-4 7 7"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M21 10v7h-7"
+}));
 const FIELD_META = {
   ph: {
     label: "pH-Wert",
@@ -278,25 +286,29 @@ const FIELD_META = {
     icon: IconDroplet,
     min: 6.5,
     max: 9.5,
-    step: 0.1
+    step: 0.1,
+    inputMode: "decimal"
   },
   temp: {
     label: "Temperatur",
     unit: "°C",
     icon: IconThermometer,
-    step: 0.1
+    step: 0.1,
+    inputMode: "decimal"
   },
   schuettung: {
     label: "Schüttung",
     unit: "l/min",
     icon: IconWaves,
-    step: 0.1
+    step: 0.1,
+    inputMode: "decimal"
   },
   tds: {
     label: "TDS",
     unit: "ppm",
     icon: IconGauge,
-    step: 1
+    step: 1,
+    inputMode: "numeric"
   }
 };
 function emptyForm() {
@@ -325,10 +337,23 @@ function addMonths(iso, months) {
   d.setMonth(d.getMonth() + months);
   return d.toISOString().slice(0, 10);
 }
-function phStatus(entry) {
-  if (entry.ph == null) return "none";
-  if (entry.ph < FIELD_META.ph.min || entry.ph > FIELD_META.ph.max) return "warn";
-  return "ok";
+function entryFlags(entry, prevEntry) {
+  const flags = {
+    ph: false,
+    tds: false,
+    schuettung: false
+  };
+  if (entry.ph != null && (entry.ph < FIELD_META.ph.min || entry.ph > FIELD_META.ph.max)) flags.ph = true;
+  if (entry.tds != null && prevEntry && prevEntry.tds != null && prevEntry.tds > 0) {
+    if (Math.abs(entry.tds - prevEntry.tds) / prevEntry.tds >= 0.3) flags.tds = true;
+  }
+  if (entry.schuettung != null && prevEntry && prevEntry.schuettung != null && prevEntry.schuettung > 0) {
+    if ((prevEntry.schuettung - entry.schuettung) / prevEntry.schuettung >= 0.4) flags.schuettung = true;
+  }
+  return flags;
+}
+function hasWarning(flags) {
+  return flags.ph || flags.tds || flags.schuettung;
 }
 function Chart({
   values,
@@ -498,11 +523,14 @@ const inputStyle = {
 };
 function EntryCard({
   entry,
+  prevEntry,
   onDelete
 }) {
   const [open, setOpen] = useState(false);
-  const status = phStatus(entry);
-  const dotColor = status === "warn" ? "#E7A94C" : status === "ok" ? "#5FD3BC" : "#3E5751";
+  const flags = entryFlags(entry, prevEntry);
+  const warn = hasWarning(flags);
+  const dotColor = warn ? "#E7A94C" : entry.ph != null ? "#5FD3BC" : "#3E5751";
+  const isMaintenance = !!entry.sonstiges;
   return /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#142623",
@@ -542,7 +570,12 @@ function EntryCard({
       fontFamily: "'IBM Plex Mono', monospace",
       fontSize: 14.5
     }
-  }, fmtDate(entry.date))), /*#__PURE__*/React.createElement("div", {
+  }, fmtDate(entry.date)), isMaintenance && /*#__PURE__*/React.createElement(IconWrench, {
+    size: 13,
+    style: {
+      color: "#93A69E"
+    }
+  })), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -573,7 +606,8 @@ function EntryCard({
     style: {
       background: "#0E1918",
       borderRadius: 10,
-      padding: "8px 10px"
+      padding: "8px 10px",
+      border: flags[key] ? "1px solid #E7A94C" : "1px solid transparent"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -586,9 +620,43 @@ function EntryCard({
     style: {
       fontFamily: "'IBM Plex Mono', monospace",
       fontSize: 15,
-      marginTop: 2
+      marginTop: 2,
+      color: flags[key] ? "#E7A94C" : "#EEEFE6"
     }
-  }, entry[key] != null ? `${entry[key]}${meta.unit ? " " + meta.unit : ""}` : "—")))), /*#__PURE__*/React.createElement("div", {
+  }, entry[key] != null ? `${entry[key]}${meta.unit ? " " + meta.unit : ""}` : "—")))), flags.ph && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 8,
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+      fontSize: 12.5,
+      color: "#E7A94C"
+    }
+  }, /*#__PURE__*/React.createElement(IconAlertTriangle, {
+    size: 13
+  }), " pH außerhalb Richtwert 6,5–9,5"), flags.tds && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 6,
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+      fontSize: 12.5,
+      color: "#E7A94C"
+    }
+  }, /*#__PURE__*/React.createElement(IconAlertTriangle, {
+    size: 13
+  }), " TDS-Sprung ≥30 % zur Vormessung"), flags.schuettung && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 6,
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+      fontSize: 12.5,
+      color: "#E7A94C"
+    }
+  }, /*#__PURE__*/React.createElement(IconTrendDown, {
+    size: 13
+  }), " Schüttung ≥40 % niedriger als bei Vormessung"), /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 8,
       fontSize: 13,
@@ -604,12 +672,32 @@ function EntryCard({
     }
   }, entry.wetter || "—")), entry.sonstiges && /*#__PURE__*/React.createElement("div", {
     style: {
-      marginTop: 6,
+      marginTop: 8,
+      background: "rgba(199,214,107,0.08)",
+      border: "1px solid rgba(199,214,107,0.3)",
+      borderRadius: 10,
+      padding: "8px 10px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+      fontSize: 11,
+      color: "#C7D66B",
+      textTransform: "uppercase",
+      letterSpacing: "0.05em"
+    }
+  }, /*#__PURE__*/React.createElement(IconWrench, {
+    size: 12
+  }), " Wartung / Notiz"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 4,
       fontSize: 13,
       color: "#EEEFE6",
       lineHeight: 1.4
     }
-  }, entry.sonstiges), /*#__PURE__*/React.createElement("button", {
+  }, entry.sonstiges)), /*#__PURE__*/React.createElement("button", {
     onClick: onDelete,
     style: {
       marginTop: 10,
@@ -626,6 +714,162 @@ function EntryCard({
   }, /*#__PURE__*/React.createElement(IconTrash, {
     size: 13
   }), " Messung löschen")));
+}
+function YearComparison({
+  entries
+}) {
+  const years = [...new Set(entries.map(e => e.date.slice(0, 4)))].sort();
+  if (years.length < 2) return null;
+  const monthNames = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
+  const months = [...new Set(entries.map(e => parseInt(e.date.slice(5, 7), 10)))].sort((a, b) => a - b);
+  const lookup = {};
+  entries.forEach(e => {
+    lookup[`${e.date.slice(0, 4)}-${parseInt(e.date.slice(5, 7), 10)}`] = e;
+  });
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 20,
+      background: "#142623",
+      border: "1px solid #24403A",
+      borderRadius: 14,
+      padding: "14px 14px 10px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#93A69E",
+      textTransform: "uppercase",
+      letterSpacing: "0.08em",
+      marginBottom: 10
+    }
+  }, "Jahresvergleich · pH nach Monat"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      overflowX: "auto"
+    }
+  }, /*#__PURE__*/React.createElement("table", {
+    style: {
+      width: "100%",
+      borderCollapse: "collapse",
+      fontFamily: "'IBM Plex Mono', monospace",
+      fontSize: 13
+    }
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", {
+    style: {
+      textAlign: "left",
+      padding: "4px 8px 8px 0",
+      color: "#93A69E",
+      fontWeight: 500,
+      fontSize: 11
+    }
+  }, "Monat"), years.map(y => /*#__PURE__*/React.createElement("th", {
+    key: y,
+    style: {
+      textAlign: "right",
+      padding: "4px 8px 8px",
+      color: "#93A69E",
+      fontWeight: 500,
+      fontSize: 11
+    }
+  }, y)))), /*#__PURE__*/React.createElement("tbody", null, months.map(m => /*#__PURE__*/React.createElement("tr", {
+    key: m
+  }, /*#__PURE__*/React.createElement("td", {
+    style: {
+      padding: "4px 8px 4px 0",
+      color: "#93A69E",
+      borderTop: "1px solid #24403A"
+    }
+  }, monthNames[m - 1]), years.map(y => {
+    const e = lookup[`${y}-${m}`];
+    const v = e ? e.ph : null;
+    const warn = v != null && (v < FIELD_META.ph.min || v > FIELD_META.ph.max);
+    return /*#__PURE__*/React.createElement("td", {
+      key: y,
+      style: {
+        textAlign: "right",
+        padding: "4px 8px",
+        borderTop: "1px solid #24403A",
+        color: v == null ? "#3E5751" : warn ? "#E7A94C" : "#EEEFE6"
+      }
+    }, v ?? "–");
+  })))))));
+}
+function MaintenanceLog({
+  entries
+}) {
+  const withNotes = entries.filter(e => e.sonstiges);
+  if (withNotes.length === 0) return null;
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 26
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: "'Fraunces', serif",
+      fontSize: 17,
+      fontWeight: 600,
+      marginBottom: 10,
+      display: "flex",
+      alignItems: "center",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement(IconWrench, {
+    size: 16,
+    style: {
+      color: "#C7D66B"
+    }
+  }), " Wartungshistorie"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 0
+    }
+  }, withNotes.map((en, idx) => /*#__PURE__*/React.createElement("div", {
+    key: en.id,
+    style: {
+      display: "flex",
+      gap: 12,
+      paddingBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: 8,
+      height: 8,
+      borderRadius: 999,
+      background: "#C7D66B",
+      marginTop: 5,
+      flexShrink: 0
+    }
+  }), idx < withNotes.length - 1 && /*#__PURE__*/React.createElement("span", {
+    style: {
+      flex: 1,
+      width: 1,
+      background: "#24403A",
+      marginTop: 4
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      paddingBottom: 4
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: "'IBM Plex Mono', monospace",
+      fontSize: 13,
+      color: "#93A69E"
+    }
+  }, fmtDate(en.date)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13.5,
+      color: "#EEEFE6",
+      marginTop: 2,
+      lineHeight: 1.4
+    }
+  }, en.sonstiges))))));
 }
 function PasswordGate({
   onSubmit,
@@ -750,6 +994,9 @@ function QuellenApp() {
   const sorted = useMemo(() => [...entries].sort((a, b) => a.date.localeCompare(b.date)), [entries]);
   const reverseSorted = useMemo(() => [...sorted].reverse(), [sorted]);
   const latest = reverseSorted[0];
+  const prevLatest = reverseSorted[1];
+  const latestFlags = latest ? entryFlags(latest, prevLatest) : {};
+  const latestWarn = hasWarning(latestFlags);
   const nextDue = latest ? addMonths(latest.date, 2) : null;
   const overdue = nextDue ? new Date(nextDue) < new Date(new Date().toISOString().slice(0, 10)) : false;
   async function persist(next) {
@@ -843,7 +1090,7 @@ function QuellenApp() {
       alignItems: "center",
       flexWrap: "wrap"
     }
-  }, latest ? phStatus(latest) === "warn" ? /*#__PURE__*/React.createElement("span", {
+  }, latest ? latestWarn ? /*#__PURE__*/React.createElement("span", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -856,7 +1103,7 @@ function QuellenApp() {
     }
   }, /*#__PURE__*/React.createElement(IconAlertTriangle, {
     size: 14
-  }), " pH außerhalb Richtwert") : phStatus(latest) === "ok" ? /*#__PURE__*/React.createElement("span", {
+  }), [latestFlags.ph && "pH außerhalb Richtwert", latestFlags.tds && "TDS-Sprung", latestFlags.schuettung && "Schüttung stark gesunken"].filter(Boolean).join(" · ")) : latest.ph != null ? /*#__PURE__*/React.createElement("span", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -934,6 +1181,10 @@ function QuellenApp() {
       lineHeight: 1.5
     }
   }, "pH 6,5–9,5 ist als grobe Orientierung an der österreichischen Trinkwasserverordnung hinterlegt und dient nur der eigenen Verlaufskontrolle — keine Rechts- oder Trinkwasserfreigabe. Für eine verbindliche Beurteilung zählt die amtliche Untersuchung.", /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 8
+    }
+  }, "Zusätzlich markiert: ein TDS-Sprung von 30 % oder mehr sowie ein Schüttungsrückgang von 40 % oder mehr gegenüber der vorigen Messung — das sind oft frühere Warnzeichen als der pH-Wert allein."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 8
     }
@@ -1027,7 +1278,9 @@ function QuellenApp() {
   }, "TDS ppm"), /*#__PURE__*/React.createElement(Chart, {
     values: sorted.map(e => e.tds),
     color: "#7FB3D5"
-  }))), /*#__PURE__*/React.createElement("div", {
+  }))), sorted.length > 1 && /*#__PURE__*/React.createElement(YearComparison, {
+    entries: sorted
+  }), /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 20
     }
@@ -1109,6 +1362,7 @@ function QuellenApp() {
     style: labelStyle
   }, meta.label, " ", meta.unit && `(${meta.unit})`), /*#__PURE__*/React.createElement("input", {
     type: "number",
+    inputMode: meta.inputMode,
     step: meta.step,
     value: form[key],
     onChange: e => setForm({
@@ -1151,7 +1405,7 @@ function QuellenApp() {
       ...labelStyle,
       marginTop: 10
     }
-  }, "Sonstiges"), /*#__PURE__*/React.createElement("textarea", {
+  }, "Sonstiges / Wartung"), /*#__PURE__*/React.createElement("textarea", {
     value: form.sonstiges,
     onChange: e => setForm({
       ...form,
@@ -1163,7 +1417,13 @@ function QuellenApp() {
       resize: "vertical"
     },
     placeholder: "Beobachtungen, Wartung, Materialtausch …"
-  }), /*#__PURE__*/React.createElement("button", {
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11.5,
+      color: "#5C6E68",
+      marginTop: 4
+    }
+  }, "Bei reiner Wartung ohne Messung einfach die Messfelder oben leer lassen."), /*#__PURE__*/React.createElement("button", {
     type: "submit",
     style: {
       marginTop: 14,
@@ -1210,11 +1470,14 @@ function QuellenApp() {
       flexDirection: "column",
       gap: 10
     }
-  }, reverseSorted.map(en => /*#__PURE__*/React.createElement(EntryCard, {
+  }, reverseSorted.map((en, idx) => /*#__PURE__*/React.createElement(EntryCard, {
     key: en.id,
     entry: en,
+    prevEntry: reverseSorted[idx + 1],
     onDelete: () => removeEntry(en.id)
-  })))))), /*#__PURE__*/React.createElement(PrintReport, {
+  })))), /*#__PURE__*/React.createElement(MaintenanceLog, {
+    entries: reverseSorted
+  }))), /*#__PURE__*/React.createElement(PrintReport, {
     entries: sorted
   }));
 }
