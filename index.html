@@ -9,6 +9,12 @@
 <style>
   html, body { margin: 0; padding: 0; background: #0E1918; }
   * { box-sizing: border-box; }
+  .print-only { display: none; }
+  @media print {
+    .screen-only { display: none !important; }
+    .print-only { display: block !important; }
+    html, body { background: #fff !important; }
+  }
 </style>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -254,6 +260,17 @@ const IconCalendarClock = p => /*#__PURE__*/React.createElement(Icon, p, /*#__PU
 }), /*#__PURE__*/React.createElement("path", {
   d: "M16 2v4M8 2v4M3 10h18"
 }));
+const IconPrinter = p => /*#__PURE__*/React.createElement(Icon, p, /*#__PURE__*/React.createElement("path", {
+  d: "M6 9V2h12v7"
+}), /*#__PURE__*/React.createElement("rect", {
+  x: "4",
+  y: "9",
+  width: "16",
+  height: "8",
+  rx: "1"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M6 17v5h12v-5"
+}));
 const FIELD_META = {
   ph: {
     label: "pH-Wert",
@@ -313,11 +330,14 @@ function phStatus(entry) {
   if (entry.ph < FIELD_META.ph.min || entry.ph > FIELD_META.ph.max) return "warn";
   return "ok";
 }
-function Sparkline({
+function Chart({
   values,
+  dates,
   color,
-  height = 40
+  unit = "",
+  height = 110
 }) {
+  const gradId = "grad-" + color.replace("#", "");
   const pts = values.map((v, i) => ({
     v,
     i
@@ -333,29 +353,102 @@ function Sparkline({
       }
     }, "zu wenig Daten");
   }
-  const width = 200;
+  const width = 300;
+  const padL = 34,
+    padR = 8,
+    padT = 10,
+    padB = 4;
+  const innerW = width - padL - padR;
+  const innerH = height - padT - padB;
   const vals = pts.map(p => p.v);
   const min = Math.min(...vals),
     max = Math.max(...vals);
   const range = max - min || 1;
-  const path = pts.map((p, idx) => {
-    const x = p.i / (values.length - 1) * width;
-    const y = height - (p.v - min) / range * (height - 8) - 4;
-    return `${idx === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
+  const xFor = i => padL + i / (values.length - 1) * innerW;
+  const yFor = v => padT + innerH - (v - min) / range * innerH;
+  const linePath = pts.map((p, idx) => `${idx === 0 ? "M" : "L"}${xFor(p.i).toFixed(1)},${yFor(p.v).toFixed(1)}`).join(" ");
+  const areaPath = `${linePath} L${xFor(pts[pts.length - 1].i).toFixed(1)},${(padT + innerH).toFixed(1)} L${xFor(pts[0].i).toFixed(1)},${(padT + innerH).toFixed(1)} Z`;
+  const last = pts[pts.length - 1];
+  const first = pts[0];
   return /*#__PURE__*/React.createElement("svg", {
     viewBox: `0 0 ${width} ${height}`,
     width: "100%",
     height: height,
     preserveAspectRatio: "none"
-  }, /*#__PURE__*/React.createElement("path", {
-    d: path,
+  }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("linearGradient", {
+    id: gradId,
+    x1: "0",
+    y1: "0",
+    x2: "0",
+    y2: "1"
+  }, /*#__PURE__*/React.createElement("stop", {
+    offset: "0%",
+    stopColor: color,
+    stopOpacity: "0.35"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "100%",
+    stopColor: color,
+    stopOpacity: "0"
+  }))), /*#__PURE__*/React.createElement("line", {
+    x1: padL,
+    y1: padT,
+    x2: width - padR,
+    y2: padT,
+    stroke: "#24403A",
+    strokeWidth: "1"
+  }), /*#__PURE__*/React.createElement("line", {
+    x1: padL,
+    y1: padT + innerH,
+    x2: width - padR,
+    y2: padT + innerH,
+    stroke: "#24403A",
+    strokeWidth: "1"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: padL - 6,
+    y: padT + 4,
+    textAnchor: "end",
+    fontSize: "9",
+    fill: "#5C6E68",
+    fontFamily: "'IBM Plex Mono', monospace"
+  }, max), /*#__PURE__*/React.createElement("text", {
+    x: padL - 6,
+    y: padT + innerH + 3,
+    textAnchor: "end",
+    fontSize: "9",
+    fill: "#5C6E68",
+    fontFamily: "'IBM Plex Mono', monospace"
+  }, min), /*#__PURE__*/React.createElement("path", {
+    d: areaPath,
+    fill: `url(#${gradId})`,
+    stroke: "none"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: linePath,
     fill: "none",
     stroke: color,
     strokeWidth: "2",
     strokeLinecap: "round",
     strokeLinejoin: "round"
-  }));
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: xFor(first.i),
+    cy: yFor(first.v),
+    r: "2.5",
+    fill: "#0E1918",
+    stroke: color,
+    strokeWidth: "1.5"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: xFor(last.i),
+    cy: yFor(last.v),
+    r: "3",
+    fill: color
+  }), /*#__PURE__*/React.createElement("text", {
+    x: xFor(last.i),
+    y: yFor(last.v) - 8 < padT + 6 ? yFor(last.v) + 16 : yFor(last.v) - 8,
+    textAnchor: "end",
+    fontSize: "11",
+    fontWeight: "600",
+    fill: color,
+    fontFamily: "'IBM Plex Mono', monospace"
+  }, last.v, unit));
 }
 function RippleMark({
   size = 120
@@ -697,7 +790,8 @@ function QuellenApp() {
   function removeEntry(id) {
     persist(entries.filter(en => en.id !== id));
   }
-  return /*#__PURE__*/React.createElement("div", {
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "screen-only",
     style: {
       background: "#0E1918",
       minHeight: "100vh",
@@ -791,7 +885,14 @@ function QuellenApp() {
     }
   }, /*#__PURE__*/React.createElement(IconCalendarClock, {
     size: 14
-  }), "Letzte Messung ", fmtDate(latest.date), " · ", overdue ? "nächste Messung überfällig" : `nächste Messung ab ${fmtDate(nextDue)}`)), /*#__PURE__*/React.createElement("button", {
+  }), "Letzte Messung ", fmtDate(latest.date), " · ", overdue ? "nächste Messung überfällig" : `nächste Messung ab ${fmtDate(nextDue)}`)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 16,
+      marginTop: 10,
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
     onClick: () => setInfoOpen(v => !v),
     style: {
       display: "flex",
@@ -801,13 +902,27 @@ function QuellenApp() {
       border: "none",
       color: "#93A69E",
       fontSize: 12,
-      marginTop: 10,
       padding: "6px 2px",
       cursor: "pointer"
     }
   }, /*#__PURE__*/React.createElement(IconInfo, {
     size: 13
-  }), " Richtwerte & Hinweis"), infoOpen && /*#__PURE__*/React.createElement("div", {
+  }), " Richtwerte & Hinweis"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => window.print(),
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+      background: "none",
+      border: "none",
+      color: "#93A69E",
+      fontSize: 12,
+      padding: "6px 2px",
+      cursor: "pointer"
+    }
+  }, /*#__PURE__*/React.createElement(IconPrinter, {
+    size: 13
+  }), " Drucken / als PDF")), infoOpen && /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 12.5,
       color: "#93A69E",
@@ -857,7 +972,7 @@ function QuellenApp() {
       textTransform: "uppercase",
       letterSpacing: "0.08em"
     }
-  }, "pH-Verlauf"), /*#__PURE__*/React.createElement(Sparkline, {
+  }, "pH-Verlauf"), /*#__PURE__*/React.createElement(Chart, {
     values: sorted.map(e => e.ph),
     color: "#5FD3BC"
   })), /*#__PURE__*/React.createElement("div", {
@@ -874,9 +989,44 @@ function QuellenApp() {
       textTransform: "uppercase",
       letterSpacing: "0.08em"
     }
-  }, "Schüttung l/min"), /*#__PURE__*/React.createElement(Sparkline, {
+  }, "Temperatur °C"), /*#__PURE__*/React.createElement(Chart, {
+    values: sorted.map(e => e.temp),
+    color: "#E7A94C",
+    unit: "°"
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#142623",
+      border: "1px solid #24403A",
+      borderRadius: 14,
+      padding: "12px 14px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#93A69E",
+      textTransform: "uppercase",
+      letterSpacing: "0.08em"
+    }
+  }, "Schüttung l/min"), /*#__PURE__*/React.createElement(Chart, {
     values: sorted.map(e => e.schuettung),
     color: "#C7D66B"
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#142623",
+      border: "1px solid #24403A",
+      borderRadius: 14,
+      padding: "12px 14px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#93A69E",
+      textTransform: "uppercase",
+      letterSpacing: "0.08em"
+    }
+  }, "TDS ppm"), /*#__PURE__*/React.createElement(Chart, {
+    values: sorted.map(e => e.tds),
+    color: "#7FB3D5"
   }))), /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 20
@@ -1064,7 +1214,87 @@ function QuellenApp() {
     key: en.id,
     entry: en,
     onDelete: () => removeEntry(en.id)
-  }))))));
+  })))))), /*#__PURE__*/React.createElement(PrintReport, {
+    entries: sorted
+  }));
+}
+function PrintReport({
+  entries
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    className: "print-only",
+    style: {
+      padding: 24,
+      fontFamily: "Georgia, serif",
+      color: "#111"
+    }
+  }, /*#__PURE__*/React.createElement("h1", {
+    style: {
+      fontSize: 20,
+      marginBottom: 2
+    }
+  }, "Quellendokumentation — Quelle Hagau"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "#444",
+      marginBottom: 16
+    }
+  }, "Erstellt am ", new Date().toLocaleDateString("de-AT"), " · Richtwert pH 6,5–9,5 (Orientierung, keine amtliche Freigabe)"), /*#__PURE__*/React.createElement("table", {
+    style: {
+      width: "100%",
+      borderCollapse: "collapse",
+      fontSize: 12
+    }
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ["Datum", "pH", "Temp °C", "Schüttung l/min", "TDS ppm", "Trübung", "Wetter", "Sonstiges"].map(h => /*#__PURE__*/React.createElement("th", {
+    key: h,
+    style: {
+      textAlign: "left",
+      borderBottom: "1.5px solid #111",
+      padding: "4px 6px"
+    }
+  }, h)))), /*#__PURE__*/React.createElement("tbody", null, entries.map(en => /*#__PURE__*/React.createElement("tr", {
+    key: en.id
+  }, /*#__PURE__*/React.createElement("td", {
+    style: {
+      borderBottom: "1px solid #ccc",
+      padding: "4px 6px"
+    }
+  }, fmtDate(en.date)), /*#__PURE__*/React.createElement("td", {
+    style: {
+      borderBottom: "1px solid #ccc",
+      padding: "4px 6px"
+    }
+  }, en.ph ?? "—"), /*#__PURE__*/React.createElement("td", {
+    style: {
+      borderBottom: "1px solid #ccc",
+      padding: "4px 6px"
+    }
+  }, en.temp ?? "—"), /*#__PURE__*/React.createElement("td", {
+    style: {
+      borderBottom: "1px solid #ccc",
+      padding: "4px 6px"
+    }
+  }, en.schuettung ?? "—"), /*#__PURE__*/React.createElement("td", {
+    style: {
+      borderBottom: "1px solid #ccc",
+      padding: "4px 6px"
+    }
+  }, en.tds ?? "—"), /*#__PURE__*/React.createElement("td", {
+    style: {
+      borderBottom: "1px solid #ccc",
+      padding: "4px 6px"
+    }
+  }, en.truebung || "—"), /*#__PURE__*/React.createElement("td", {
+    style: {
+      borderBottom: "1px solid #ccc",
+      padding: "4px 6px"
+    }
+  }, en.wetter || "—"), /*#__PURE__*/React.createElement("td", {
+    style: {
+      borderBottom: "1px solid #ccc",
+      padding: "4px 6px"
+    }
+  }, en.sonstiges || "—"))))));
 }
 ReactDOM.createRoot(document.getElementById("root")).render(/*#__PURE__*/React.createElement(QuellenApp, null));
 </script>
